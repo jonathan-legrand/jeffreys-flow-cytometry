@@ -1,0 +1,11 @@
+# ELN paths for Bordeaux CHU
+ELN_FCS: /home/imb/jlegrand004/Data/ELN_events # Parquet version
+ELN_META: /home/imb/jlegrand004/Data/patients_ELN.tsv
+
+# Original Camilla data, GEIL protocol, ICAML database
+GEIL_FCS: /home/imb/jlegrand004/Data/preprocessed_GEIL-train-set-pns_events
+GEIL_META: /home/imb/jlegrand004/Data/GEIL_train_anon.xlsx
+
+# Test GEIL data (test cohort in the article)
+GEIL_TEST_FCS: /home/imb/jlegrand004/Data/preprocessed_GEIL-test-set-pns_events
+GEIL_TEST_META: /home/imb/jlegrand004/Data/GEIL_test_anon.xlsx

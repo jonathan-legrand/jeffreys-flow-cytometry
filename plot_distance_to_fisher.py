@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.lines import Line2D
+
 
 rc = {
     "text.usetex": False,
@@ -18,6 +20,9 @@ sns.set_theme(
     style="darkgrid",
     rc=rc,
 )
+# For correctly vs incorrectly patients,
+# we want a good vs bad kind of palette, so blue first
+set1_colors = list(sns.color_palette("Set1", n_colors=2))[::-1]
 
 def compute_misclassification_rates_from_curve(
     curve, accuracy_before_rejection, threshold
@@ -114,8 +119,25 @@ sns.barplot(
 plt.ylabel("Mean retention gap")
 plt.xlabel("Number of subject GMM components")
 plt.savefig("figures/methods-evaluation.eps", bbox_inches="tight")
+plt.close()
 # %%
 
+x = np.linspace(0, 2*np.pi)
+df = pd.DataFrame(x, columns=["x"])
+df["sin"] = np.sin(x)
+df["cos"] = np.cos(x)
+df["2cos"] = 2 * np.cos(x)
+df = df.melt(id_vars="x")
+sns.lineplot(
+    df,
+    x="x",
+    y="value",
+    style="variable",
+    markers=True
+)
+plt.close()
+
+# %%
 # Gather rejection curves for best method
 best_threshold = results[results.name == best_method].optimal_threshold.median()
 curve_data = []
@@ -149,33 +171,51 @@ for _, run_curve in curve_data.groupby("run"):
     aligned_curves.append(aligned_curve)
 plot_data = pd.concat(aligned_curves, ignore_index=True)
 
+# %%
 # Display curves and best threshold
 plot_data["Rejected"] = plot_data["distance_threshold"] > best_threshold
 melt = plot_data.melt(
     id_vars=["distance_threshold", "Rejected", "run"],
     value_vars=["correctly_classified", "incorrectly_classified"],
     var_name="Outcome",
-    value_name="Proportion kept (%)",
+    value_name="Proportion kept [%]",
 )
-sns.lineplot(
+ax = sns.lineplot(
     melt,
     x="distance_threshold",
-    y="Proportion kept (%)",
+    y="Proportion kept [%]",
     hue="Outcome",
+    style="Outcome", # Style as well for grayscale printing
     estimator="mean",
     errorbar=("ci", 95),
+    palette=set1_colors
 )
-plt.vlines(
+curve_handles = ax.get_legend().get_lines()
+
+ax.vlines(
     x=best_threshold,
     ymin=0,
     ymax=100,
-    linestyles="dashed",
+    linestyles="dotted",
     color="black",
     label="Tuned rejection threshold",
 )
-plt.legend(loc="lower right")
-plt.xlabel("Distance")
-plt.savefig("figures/rejection_curves.png", dpi=400)
+ax.legend(
+    handles=[
+        *curve_handles,
+        Line2D([], [], color="black", linestyle="--"),
+    ],
+    loc="lower right",
+    labels=[
+        "Correctly classified",
+        "Incorrectly classified",
+        "Tuned rejection threshold",
+    ]
+)
+plt.xlabel("Jeffreys divergence [nats]", fontsize=13)
+plt.ylabel("Proportion kept [%]", fontsize=13)
+plt.savefig("figures/rejection_curves.png", dpi=800)
+plt.close()
 
 highest_distance_row = curve_data[
     curve_data.distance_threshold < best_threshold

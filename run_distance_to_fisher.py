@@ -61,34 +61,37 @@ tasks = {
     }
 }
 
-def compute_retention_curve(distances, correct, top_fraction=0.8):
+def compute_retention_curve(distances, correct, batches):
     """
     Average the correct-retention minus error-retention gap over farthest cutoffs.
     """
     n_correct = int(correct.sum())
     n_incorrect = int((~correct).sum())
-    max_removed_rank = int(np.ceil(len(distances) * top_fraction))
     curve = []
     removed = 0
-    for threshold in np.sort(np.unique(distances))[::-1]:
-        if removed >= max_removed_rank:
-            break
+    for threshold in np.sort(distances)[::-1]:
         removed_mask = distances >= threshold
+        removed = removed_mask.sum()
+        assert removed == len(curve) + 1, "We do not support ties"
+
         kept_correct = int(np.sum(correct & ~removed_mask))
         kept_incorrect = int(np.sum(~correct & ~removed_mask))
         correct_retained = kept_correct / n_correct * 100
         incorrect_retained = kept_incorrect / n_incorrect * 100
+
+        removed_batch = batches[np.flatnonzero(distances == threshold)[0]]
+
         curve.append(
             {
                 "distance_threshold": float(threshold),
                 "removed_subjects": int(removed_mask.sum()),
+                "removed_batch": removed_batch,
                 "correctly_classified": correct_retained,
                 "incorrectly_classified": incorrect_retained,
                 "retention_gap": correct_retained - incorrect_retained,
             }
         )
-        removed = int(removed_mask.sum())
-
+        
     criterion = float(np.mean([point["retention_gap"] for point in curve]))
     return {
         "criterion": criterion,
@@ -173,7 +176,7 @@ def run_analysis(seed):
         retention_analysis_validation = compute_retention_curve(
             distances[validation_indices],
             y_test[validation_indices] == y_pred[validation_indices],
-            top_fraction=1
+            tabular_test.protocol.to_numpy()[validation_indices],
         )
         curve_data = pd.DataFrame(retention_analysis_validation["curve"])
         optimal_threshold = curve_data.sort_values(
@@ -192,7 +195,7 @@ def run_analysis(seed):
         retention_analysis_evaluation = compute_retention_curve(
             evaluation_distances,
             evaluation_correct,
-            top_fraction=1,
+            tabular_test.protocol.to_numpy()[evaluation_indices],
         )
 
         results.append(

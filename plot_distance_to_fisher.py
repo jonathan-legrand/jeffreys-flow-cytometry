@@ -7,6 +7,7 @@ import pandas as pd
 import seaborn as sns
 from matplotlib.lines import Line2D
 from run_config.simple_config import rc
+from source.distance_analysis import split_retention_curve_by_batch
 
 sns.set_theme(
     context="paper",
@@ -134,34 +135,44 @@ plt.close()
 # Gather rejection curves for best method
 best_threshold = results[results.name == best_method].optimal_threshold.median()
 curve_data = []
+batch_curve_data = []
 for run_index, curve_result in enumerate(curves):
     best_curve = pd.DataFrame(curve_result[best_method])
     best_curve["run"] = run_index
     curve_data.append(best_curve)
+    for batch, batch_curve in split_retention_curve_by_batch(
+        curve_result[best_method]
+    ).items():
+        batch_curve_frame = pd.DataFrame(batch_curve)
+        batch_curve_frame["run"] = run_index
+        batch_curve_data.append(batch_curve_frame)
 curve_data = pd.concat(curve_data)
+batch_curve_data = pd.concat(batch_curve_data, ignore_index=True)
 
-# Put all runs on the same reference distance scale
-# because otherwise seaborn won't display error shades
-run_threshold_ranges = curve_data.groupby("run")["distance_threshold"].agg(
-    ["min", "max"]
-)
-shared_min = run_threshold_ranges["min"].max()
-shared_max = run_threshold_ranges["max"].min()
-shared_thresholds = np.sort(
-    curve_data.loc[
-        curve_data["distance_threshold"].between(shared_min, shared_max),
-        "distance_threshold",
-    ].unique()
-)
+# Align runs within each batch so each facet aggregates matching thresholds.
 aligned_curves = []
-for _, run_curve in curve_data.groupby("run"):
-    run_curve = run_curve.sort_values("distance_threshold")
-    indices = np.searchsorted(
-        run_curve["distance_threshold"].to_numpy(), shared_thresholds, side="left"
+for batch, batch_data in batch_curve_data.groupby("removed_batch"):
+    run_threshold_ranges = batch_data.groupby("run")["distance_threshold"].agg(
+        ["min", "max"]
     )
-    aligned_curve = run_curve.iloc[indices].copy()
-    aligned_curve["distance_threshold"] = shared_thresholds
-    aligned_curves.append(aligned_curve)
+    shared_min = run_threshold_ranges["min"].max()
+    shared_max = run_threshold_ranges["max"].min()
+    shared_thresholds = np.sort(
+        batch_data.loc[
+            batch_data["distance_threshold"].between(shared_min, shared_max),
+            "distance_threshold",
+        ].unique()
+    )
+    for _, run_curve in batch_data.groupby("run"):
+        run_curve = run_curve.sort_values("distance_threshold")
+        indices = np.searchsorted(
+            run_curve["distance_threshold"].to_numpy(),
+            shared_thresholds,
+            side="left",
+        )
+        aligned_curve = run_curve.iloc[indices].copy()
+        aligned_curve["distance_threshold"] = shared_thresholds
+        aligned_curves.append(aligned_curve)
 plot_data = pd.concat(aligned_curves, ignore_index=True)
 
 # %%
@@ -184,33 +195,36 @@ g = sns.relplot(
     palette=set1_colors,
     kind="line",
     col="removed_batch",
-    facet_kws=dict(sharex=True, sharey=True),
+    facet_kws=dict(sharex=False, sharey=True),
     legend=None
 )
 
-dataset = ("Time-shifted", "Panel-shifted")
+batch_titles = {"ELN": "Panel-shifted", "GEIL": "Time-shifted"}
 
-for i, ax in enumerate(g.axes[0]):
+for batch, ax in zip(g.col_names, g.axes[0]):
     ax.vlines(
         x=best_threshold,
         ymin=0,
         ymax=100,
         linestyles="dotted",
         color="black",
+        linewidth=2,
         label="Rejection threshold",
     )
 
     ax.set_xlabel("Jeffreys divergence [nats]")
-    ax.set_title(dataset[i])
+    ax.set_title(batch_titles.get(batch, batch))
 
 
 legend_data = {
-    "Correctly classified": Line2D([], [], color=set1_colors[0]),
+    "Correctly classified": Line2D(
+        [], [], color=set1_colors[0], linewidth=2
+    ),
     "Incorrectly classified": Line2D(
-        [], [], color=set1_colors[1], linestyle="dashed"
+        [], [], color=set1_colors[1], linestyle="dashed", linewidth=2
     ),
     "Rejection threshold": Line2D(
-        [], [], color="black", linestyle="dotted"
+        [], [], color="black", linestyle="dotted", linewidth=2
     ),
 }
 

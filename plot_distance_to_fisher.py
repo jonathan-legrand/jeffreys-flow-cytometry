@@ -6,18 +6,11 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib.lines import Line2D
-
-
-rc = {
-    "text.usetex": False,
-    "font.family": "serif",
-    "font.serif": ["TeX Gyre Termes", "Nimbus Roman", "Liberation Serif", "Times New Roman", "STIXGeneral"],
-    "mathtext.fontset": "stix",
-}
+from run_config.simple_config import rc
 
 sns.set_theme(
     context="paper",
-    style="darkgrid",
+    style="whitegrid",
     rc=rc,
 )
 # For correctly vs incorrectly patients,
@@ -175,12 +168,12 @@ plot_data = pd.concat(aligned_curves, ignore_index=True)
 # Display curves and best threshold
 plot_data["Rejected"] = plot_data["distance_threshold"] > best_threshold
 melt = plot_data.melt(
-    id_vars=["distance_threshold", "Rejected", "run"],
+    id_vars=["distance_threshold", "Rejected", "run", "removed_batch"],
     value_vars=["correctly_classified", "incorrectly_classified"],
     var_name="Outcome",
     value_name="Proportion kept [%]",
 )
-ax = sns.lineplot(
+g = sns.relplot(
     melt,
     x="distance_threshold",
     y="Proportion kept [%]",
@@ -188,34 +181,49 @@ ax = sns.lineplot(
     style="Outcome", # Style as well for grayscale printing
     estimator="mean",
     errorbar=("ci", 95),
-    palette=set1_colors
+    palette=set1_colors,
+    kind="line",
+    col="removed_batch",
+    facet_kws=dict(sharex=True, sharey=True),
+    legend=None
 )
-curve_handles = ax.get_legend().get_lines()
 
-ax.vlines(
-    x=best_threshold,
-    ymin=0,
-    ymax=100,
-    linestyles="dotted",
-    color="black",
-    label="Tuned rejection threshold",
-)
-ax.legend(
-    handles=[
-        *curve_handles,
-        Line2D([], [], color="black", linestyle="--"),
-    ],
+dataset = ("Time-shifted", "Panel-shifted")
+
+for i, ax in enumerate(g.axes[0]):
+    ax.vlines(
+        x=best_threshold,
+        ymin=0,
+        ymax=100,
+        linestyles="dotted",
+        color="black",
+        label="Rejection threshold",
+    )
+
+    ax.set_xlabel("Jeffreys divergence [nats]")
+    ax.set_title(dataset[i])
+
+
+legend_data = {
+    "Correctly classified": Line2D([], [], color=set1_colors[0]),
+    "Incorrectly classified": Line2D(
+        [], [], color=set1_colors[1], linestyle="dashed"
+    ),
+    "Rejection threshold": Line2D(
+        [], [], color="black", linestyle="dotted"
+    ),
+}
+
+g.axes[0, 0].legend(
+    handles=list(legend_data.values()),
+    labels=list(legend_data.keys()),
     loc="lower right",
-    labels=[
-        "Correctly classified",
-        "Incorrectly classified",
-        "Tuned rejection threshold",
-    ]
+    bbox_to_anchor=(1.1, 0., 0., 0.)
 )
-plt.xlabel("Jeffreys divergence [nats]", fontsize=13)
-plt.ylabel("Proportion kept [%]", fontsize=13)
+
 plt.savefig("figures/rejection_curves.png", dpi=800)
 plt.close()
+# %%
 
 highest_distance_row = curve_data[
     curve_data.distance_threshold < best_threshold

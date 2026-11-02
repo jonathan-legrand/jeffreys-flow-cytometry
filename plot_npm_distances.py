@@ -8,24 +8,15 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
+from run_config.simple_config import rc
+
 CSV_PATH = Path("output/npm_distance_embeddings_k-8_20261029_104154.csv")
-
-
-rc = {
-    "text.usetex": False,
-    "font.family": "serif",
-    "legend.fontsize": 13,
-    "legend.title_fontsize": 13,
-    "font.serif": ["TeX Gyre Termes", "Nimbus Roman", "Liberation Serif", "Times New Roman", "STIXGeneral"],
-    "mathtext.fontset": "stix",   # Times-compatible math
-}
 
 sns.set_theme(
     context="paper",
-    style="darkgrid",
+    style="whitegrid",
     rc=rc,
 )
-
 
 OUTCOME_LABELS = {
     0: "NPM1-WT",
@@ -37,11 +28,10 @@ DISTANCE_METHODS = {
 }
 
 categories_mapping = {
-    "GEIL train": "Source",
+    "GEIL train": r"Source ($\mathcal{D}_{\text{train}}$)",
     "GEIL": "Time-shifted",
     "ELN": "Panel-shifted"
 }
-
 
 
 data = pd.read_csv(CSV_PATH)
@@ -50,33 +40,25 @@ figure, axes = plt.subplots(1, len(DISTANCE_METHODS), figsize=(7*len(DISTANCE_ME
 outcomes = data["outcome"].to_numpy()
 groups = data["group"].astype(str).to_numpy()
 categories, group_codes = np.unique(groups, return_inverse=True)
-palette = sns.cubehelix_palette(
-    n_colors=3, start=2, rot=1, dark=0.5, light=0.9
-)
+#palette = sns.cubehelix_palette(
+#    n_colors=3, start=2, rot=1, dark=0.5, light=0.9
+#)
+palette = ["white", "gray", "black"]
 colormap = ListedColormap(palette)
 outcome_values = np.unique(outcomes)
-#markers = ("o", "^")
 group_handles = [
     Line2D(
         [],
         [],
         marker="o",
         markeredgecolor="black",
-        markersize=40,
+        markersize=13,
         linestyle="None",
         color=palette[index],
         label=categories_mapping[category]
     )
     for index, category in enumerate(categories)
 ]
-#outcome_handles = [
-#    Line2D(
-#        [], [], linestyle="None",
-#        color="black", label=OUTCOME_LABELS.get(outcome, str(outcome)),
-#    )
-#    for index, outcome in enumerate(outcome_values)
-#]
-
 for axis, (method, columns) in zip(axes[0], DISTANCE_METHODS.items()):
     embedding = data[list(columns)].to_numpy()
     for outcome_index, outcome in enumerate(outcome_values):
@@ -93,13 +75,13 @@ for axis, (method, columns) in zip(axes[0], DISTANCE_METHODS.items()):
         )
 
     #axis.set_title(method, )
-    axis.set_xlabel("MDS 1", fontsize=13)
-    axis.set_ylabel("MDS 2", fontsize=13)
+    axis.set_xlabel("MDS 1")
+    axis.set_ylabel("MDS 2")
     axis.set_xticks([-1, 0, 1])
     axis.set_yticks([-1, 0, 1])
 
 axes[0, 0].legend(
-    handles=group_handles,# + outcome_handles,
+    handles=group_handles,
     title="Dataset",
     title_fontproperties={'weight':'bold'},
     loc="upper right",

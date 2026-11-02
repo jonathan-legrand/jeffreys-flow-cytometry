@@ -11,6 +11,23 @@ from source.utils import get_config
 
 config = get_config()
 
+# Matplotlib params
+rc = {
+    "text.usetex": False,
+    "font.family": "serif",
+    "font.size": 30,
+    "font.serif": ["TeX Gyre Termes", "Nimbus Roman", "Liberation Serif", "Times New Roman", "STIXGeneral"],
+    "mathtext.fontset": "stix",
+    "axes.labelsize":20,
+    "axes.titlesize":20,
+    "xtick.labelsize":15,
+    "ytick.labelsize":15,
+    "legend.fontsize":15,
+    "legend.title_fontsize":15,
+    "legend.title_fontsize":15,
+}
+
+
 SEED = 0
 
 # The number of cells to sample from each patient
@@ -22,7 +39,6 @@ VALIDATION_FRACTION = 0.2
 # The analysis is run multiple times to have SD estimates
 N_RUNS = 20
 
-# Maybe KL is the best
 DISTANCE_CONFIGS = [
     {
         "name": f"{kind}_k-{n_components}_{covariance_type}",
@@ -38,11 +54,13 @@ DISTANCE_CONFIGS = [
     for covariance_type in ("full","diag")
 ]
 
-n_jobs = 1
 tasks = {
     "NPM_train-GEIL_infer-GEIL-and-ELN": {
         "dataset_class": PanelChangeWithGEILTestDataset,
-        "kwargs": dict(target_col="NPM", n_cells=N_CELLS), # We do not have many cells in some GEIL tubes
+        "kwargs": dict(
+            target_col="NPM",
+            n_cells=N_CELLS
+        ), # We do not have many cells in some GEIL tubes
         "random_state": SEED
     },
 }

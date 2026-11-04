@@ -51,15 +51,6 @@ name_dist_mapping = {
 task = tasks["NPM_train-GEIL_infer-GEIL-and-ELN"]
 dataset_class = task["dataset_class"]
 
-tasks = {
-    "NPM_train-GEIL_infer-GEIL-and-ELN": {
-        "dataset_class": PanelChangeWithGEILTestDataset,
-        "kwargs": dict(
-            target_col="NPM",
-            n_cells=N_CELLS
-        ),
-    }
-}
 
 def compute_retention_curve(distances, correct, batches):
     """

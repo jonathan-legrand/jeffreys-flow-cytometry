@@ -7,7 +7,10 @@ import pandas as pd
 import seaborn as sns
 from matplotlib.lines import Line2D
 from run_config.simple_config import rc
-from source.distance_analysis import split_retention_curve_by_batch
+from source.distance_analysis import (
+    compute_misclassification_rates_from_curve,
+    split_retention_curve_by_batch,
+)
 
 sns.set_theme(
     context="paper",
@@ -18,33 +21,6 @@ sns.set_theme(
 # we want a good vs bad kind of palette, so blue first
 set1_colors = list(sns.color_palette("Set1", n_colors=2))[::-1]
 
-def compute_misclassification_rates_from_curve(
-    curve, accuracy_before_rejection, threshold
-):
-
-    n_total = max(point["removed_subjects"] for point in curve)
-    n_incorrect = round((1 - accuracy_before_rejection) * n_total)
-    next_boundaries = [
-        point
-        for point in curve
-        if point["distance_threshold"] > threshold
-    ]
-
-    boundary = min(
-        next_boundaries, key=lambda point: point["distance_threshold"]
-    )
-    n_above = boundary["removed_subjects"]
-    n_incorrect_at_or_below = round(
-        n_incorrect * boundary["incorrectly_classified"] / 100
-    )
-
-    n_at_or_below = n_total - n_above
-    above_rate = (n_incorrect - n_incorrect_at_or_below) / n_above
-    at_or_below_rate = n_incorrect_at_or_below / n_at_or_below
-    fold_change = above_rate / at_or_below_rate
-    return fold_change
-
-
 with open("output/distance_to_fisher_results.json", "r") as input_file:
     saved_results = json.load(input_file)
 classification_analysis = pd.DataFrame.from_records(
@@ -52,18 +28,34 @@ classification_analysis = pd.DataFrame.from_records(
 )
 results = pd.DataFrame.from_records(saved_results["results"])
 curves = saved_results["curves"]
-best_method = (
-    results.groupby("name")["criterion_on_validation"].mean().idxmax()
-)
+best_method = results.groupby("name")["criterion_on_validation"].mean().idxmax()
+
 best_method_results = results[results["name"] == best_method].copy()
 
-best_method_results["misclassification_rate_fold_change"] = [
+
+# %%
+
+misclassification_rates = [
     compute_misclassification_rates_from_curve(
         curves[int(row.run)][best_method],
         row.accuracy_before_rejection,
         row.optimal_threshold,
     ) for row in best_method_results.itertuples()
 ]
+best_method_results["misclassification_rate_fold_change"] = [
+    rates["misclassification_rate_fold_change"]
+    for rates in misclassification_rates
+]
+best_method_results["accuracy_rejected"] = [
+    1 - rates["misclassification_rate_above_threshold"]
+    for rates in misclassification_rates
+]
+best_method_results["misclassification_rate_retained"] = (
+    1 - best_method_results["accuracy_after_rejection"]
+)
+best_method_results["misclassification_rate_rejected"] = (
+    1 - best_method_results["accuracy_rejected"]
+)
 
 
 best_method_results["accuracy_delta"] = (
@@ -73,10 +65,17 @@ best_method_results["accuracy_delta"] = (
 accuracy_summary = best_method_results[[
     "accuracy_before_rejection",
     "accuracy_after_rejection",
+    "accuracy_rejected",
     "accuracy_delta",
 ]].agg(["mean", "std"]).T
 print(f"Evaluation accuracy for best method ({best_method}):")
 print(accuracy_summary)
+misclassification_summary = best_method_results[[
+    "misclassification_rate_retained",
+    "misclassification_rate_rejected",
+]].agg(["mean", "std"]).T
+print("Misclassification rates (1 - accuracy) at best threshold:")
+print(misclassification_summary)
 fold_change_summary = best_method_results[
     "misclassification_rate_fold_change"
 ].agg(["mean", "std"])
@@ -113,22 +112,6 @@ sns.barplot(
 plt.ylabel("Mean retention gap")
 plt.xlabel("Number of subject GMM components")
 plt.savefig("figures/methods-evaluation.eps", bbox_inches="tight")
-plt.close()
-# %%
-
-x = np.linspace(0, 2*np.pi)
-df = pd.DataFrame(x, columns=["x"])
-df["sin"] = np.sin(x)
-df["cos"] = np.cos(x)
-df["2cos"] = 2 * np.cos(x)
-df = df.melt(id_vars="x")
-sns.lineplot(
-    df,
-    x="x",
-    y="value",
-    style="variable",
-    markers=True
-)
 plt.close()
 
 # %%
@@ -213,6 +196,7 @@ for batch, ax in zip(g.col_names, g.axes[0]):
     )
 
     ax.set_xlabel("Jeffreys divergence [nats]")
+    ax.set_ylabel("Proportion retained [%]")
     ax.set_title(batch_titles.get(batch, batch))
 
 

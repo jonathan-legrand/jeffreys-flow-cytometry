@@ -160,7 +160,7 @@ class ELNDataset(CytometryDataset):
         sample_paths = list(dpath.iterdir())
         
         # Load samples in parallel
-        results = joblib.Parallel(n_jobs=12, verbose=1)(
+        results = joblib.Parallel(n_jobs=4, verbose=1)(
             joblib.delayed(load_sample)(sample_path) for sample_path in sample_paths
         )
         
@@ -290,7 +290,7 @@ class ELNSplitSet(ELNDataset):
         sample_paths = list(dpath.iterdir())
         
         # Load samples in parallel
-        results = joblib.Parallel(n_jobs=12, verbose=1)(
+        results = joblib.Parallel(n_jobs=4, verbose=1)(
             joblib.delayed(load_sample)(sample_path) for sample_path in sample_paths
         )
         

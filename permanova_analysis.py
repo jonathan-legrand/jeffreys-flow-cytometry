@@ -13,13 +13,9 @@ N_PERMS = 1000
 
 # Output of compare_npm_distances.py
 DISTANCES_PATH = "output/npm_pairwise_distances_k-8_20261029_104154.csv"
+#DISTANCES_PATH = "output/npm_pairwise_distances_k-1_20261103_164506.csv"
 
 all_distances = pd.read_csv(DISTANCES_PATH)
-batchs = all_distances.batch_i.unique()
-a = len(batchs)
-N = len(np.unique(all_distances[["subject_i", "subject_j"]].values.ravel()))
-
-
 # Construct a subject: batch table
 # That's what needs to be permuted
 mapping = pd.concat([
@@ -29,44 +25,59 @@ mapping = pd.concat([
     all_distances[["subject_j", "batch_j"]].rename(
         columns={"subject_j": "subject", "batch_j": "batch"}
     ),
-]).drop_duplicates().set_index("subject")
-n_l = mapping.reset_index().groupby("batch").count().rename({"subject":"subject_count"}, axis=1)
+]).drop_duplicates().set_index("subject")["batch"]
+subject_positions = pd.Series(np.arange(len(mapping)), index=mapping.index)
+group_codes, groups = pd.factorize(mapping, sort=False)
+group_sizes = np.bincount(group_codes, minlength=len(groups))
+group_to_code = {group: code for code, group in enumerate(groups)}
+N = len(mapping)
+a = len(groups)
 
-def compute_pseudo_F(distances):
-    intra_batch_mask = distances.batch_i == distances.batch_j
-    SS_total = distances.distance.pow(2).sum() / N
+subject_i = all_distances["subject_i"].map(subject_positions).to_numpy()
+subject_j = all_distances["subject_j"].map(subject_positions).to_numpy()
+distance_squared = all_distances["distance"].to_numpy() ** 2
 
-    within_batch = distances.loc[intra_batch_mask].copy()
-    within_batch["distance_squared"] = within_batch["distance"] ** 2
-    W_l = within_batch.groupby("batch_i")["distance_squared"].sum() / n_l.subject_count
+def compute_pseudo_F(distances_squared, index_i, index_j, labels):
+    labels_i = labels[index_i]
+    labels_j = labels[index_j]
+    within_mask = labels_i == labels_j
+    within_sums = np.bincount(
+        labels_i[within_mask],
+        weights=distances_squared[within_mask],
+        minlength=a,
+    )
+    ss_total = distances_squared.sum() / N
+    ss_within = (within_sums / group_sizes).sum()
 
-    SS_within = W_l.sum()
-
-    numerator = (SS_total - SS_within) / (a-1)
-    denominator = (SS_within) / (N-a)
+    numerator = (ss_total - ss_within) / (a - 1)
+    denominator = ss_within / (N - a)
     pseudo_F = numerator / denominator
-    R_squared = 1 - SS_within / SS_total # Effect size
+    R_squared = 1 - ss_within / ss_total
     return pseudo_F, R_squared
 
 
 for method, distances in all_distances.groupby("method"):
-    realized_stat, R_squared = compute_pseudo_F(distances)
+    row_indices = distances.index.to_numpy()
+    method_distances_squared = distance_squared[row_indices]
+    method_subject_i = subject_i[row_indices]
+    method_subject_j = subject_j[row_indices]
+    realized_stat, R_squared = compute_pseudo_F(
+        method_distances_squared,
+        method_subject_i,
+        method_subject_j,
+        group_codes,
+    )
     null_stats = []
     for perm_iter in range(N_PERMS):
-
-        null_distances = distances.copy()
-
-        # Permute subject -> batch mapping
-        shuffled_mapping = mapping.sample(frac=1, random_state=perm_iter).reset_index(drop=True)
-
-        null_distances["batch_i"] = distances["subject_i"].apply(
-            lambda subject_idx: shuffled_mapping.loc[subject_idx, "batch"]
-        ).values
-        null_distances["batch_j"] = distances["subject_j"].apply(
-            lambda subject_idx: shuffled_mapping.loc[subject_idx, "batch"]
-        ).values
-
-        null_stat_iter, _ =  compute_pseudo_F(null_distances)
+        permuted_labels = mapping.sample(
+            frac=1, random_state=perm_iter
+        ).map(group_to_code).to_numpy()
+        null_stat_iter, _ = compute_pseudo_F(
+            method_distances_squared,
+            method_subject_i,
+            method_subject_j,
+            permuted_labels,
+        )
         null_stats.append(null_stat_iter)
 
     null_stats = np.array(null_stats)

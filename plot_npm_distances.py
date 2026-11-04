@@ -9,8 +9,10 @@ import pandas as pd
 import seaborn as sns
 
 from run_config.simple_config import rc
+from source.utils import name_to_dict
 
-CSV_PATH = Path("output/npm_distance_embeddings_k-8_20261029_104154.csv")
+#CSV_PATH = Path("output/npm_distance_embeddings_k-8_20261029_104154.csv")
+CSV_PATH = Path("output/npm_distance_embeddings_k-1_20261103_164506.csv")
 
 sns.set_theme(
     context="paper",
@@ -18,12 +20,12 @@ sns.set_theme(
     rc=rc,
 )
 
+PALETTE = ["white", "silver", "black"]
 OUTCOME_LABELS = {
     0: "NPM1-WT",
     1: "NPM1-mut",
 }
 DISTANCE_METHODS = {
-    #"OT-GMM": ("ot_gmm_mds1", "ot_gmm_mds2"),
     "Jeffreys GMM": ("jeffreys_gmm_mds1", "jeffreys_gmm_mds2"),
 }
 
@@ -33,6 +35,8 @@ categories_mapping = {
     "ELN": "Panel-shifted"
 }
 
+parameters = name_to_dict(CSV_PATH.name)
+k = parameters["k"]
 
 data = pd.read_csv(CSV_PATH)
 
@@ -40,11 +44,7 @@ figure, axes = plt.subplots(1, len(DISTANCE_METHODS), figsize=(7*len(DISTANCE_ME
 outcomes = data["outcome"].to_numpy()
 groups = data["group"].astype(str).to_numpy()
 categories, group_codes = np.unique(groups, return_inverse=True)
-#palette = sns.cubehelix_palette(
-#    n_colors=3, start=2, rot=1, dark=0.5, light=0.9
-#)
-palette = ["white", "gray", "black"]
-colormap = ListedColormap(palette)
+colormap = ListedColormap(PALETTE)
 outcome_values = np.unique(outcomes)
 group_handles = [
     Line2D(
@@ -54,7 +54,7 @@ group_handles = [
         markeredgecolor="black",
         markersize=13,
         linestyle="None",
-        color=palette[index],
+        color=PALETTE[index],
         label=categories_mapping[category]
     )
     for index, category in enumerate(categories)
@@ -87,10 +87,8 @@ axes[0, 0].legend(
     loc="upper right",
 )
 for image_format in ("eps", "png"):
-    output_path = Path("figures/mds").with_suffix(f".{image_format}")
+    output_path = Path(f"figures/mds_k-{k}").with_suffix(f".{image_format}")
     figure.savefig(output_path, bbox_inches='tight')
     print("Figure exported to", output_path)
 plt.show()
 
-
-# %%
